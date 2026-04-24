@@ -36,15 +36,21 @@ CORS(app)
 # ============================================================================
 # DATABASE CONNECTION
 # ============================================================================
-"""Establish connection to PostgreSQL database."""
+"""Establish connection to PostgreSQL database with lazy initialization."""
 DB_URI = os.environ.get('DB_URI')
 connection = None
 
-try:
-    connection = ps.connect(DB_URI)
-    logger.info("Successfully connected to the database")
-except PsycopgError as e:
-    logger.error(f"Failed to connect to the database: {e}")
+def get_db_connection():
+    """Get or create database connection."""
+    global connection
+    if connection is None:
+        try:
+            connection = ps.connect(DB_URI)
+            logger.info("Successfully connected to the database")
+        except PsycopgError as e:
+            logger.error(f"Failed to connect to the database: {e}")
+            raise
+    return connection
 
 # ============================================================================
 # UTILITY FUNCTIONS
@@ -151,7 +157,7 @@ def get_with_optional():
         )
         
         profiles = get_name_with_optional(
-            conn=connection,
+            conn=get_db_connection(),
             gender=gender,
             country_id=country_id,
             age_group=age_group,
@@ -249,7 +255,7 @@ def nlp():
         # DATABASE QUERY
         # ====================================================================
         """Execute database query with extracted parameters."""
-        response = get_name_with_optional(connection, **query_params)
+        response = get_name_with_optional(get_db_connection(), **query_params)
         
         # ====================================================================
         # RESPONSE HANDLING
@@ -333,4 +339,7 @@ if __name__ == '__main__':
         if connection:
             connection.close()
             logger.info("Database connection closed")
+
+# Vercel WSGI export - required for serverless deployment
+# Make the app directly available for Vercel to import
 

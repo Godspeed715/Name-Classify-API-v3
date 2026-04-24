@@ -1,11 +1,19 @@
 import spacy
 import pycountry as py
 import country_converter as coco
+import sys
+import os
 
 cc = coco.CountryConverter()
 
-# 1. Load the base English model
-nlp = spacy.load("en_core_web_sm")
+# 1. Load the base English model with error handling
+try:
+    nlp = spacy.load("en_core_web_sm")
+except OSError:
+    # Model not installed, download it
+    import subprocess
+    subprocess.check_call([sys.executable, "-m", "spacy", "download", "en_core_web_sm"])
+    nlp = spacy.load("en_core_web_sm")
 
 # 2. Add an EntityRuler to the pipeline
 # We place it before the default 'ner' so our custom rules take priority
