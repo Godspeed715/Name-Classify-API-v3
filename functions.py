@@ -107,10 +107,10 @@ def arrange_response(response):
             'name': profile[1],
             'gender': profile[2],
             'gender_probability': float(profile[3]),
-            'sample_size': profile[4],
-            'age': profile[5],
-            'age_group': profile[6],
-            'country_id': profile[7],
+            'age': profile[4],
+            'age_group': profile[5],
+            'country_id': profile[6],
+            'country_name': profile[7],
             'country_probability': float(profile[8]),
             'created_at': profile[9]
         })
