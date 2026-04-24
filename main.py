@@ -13,6 +13,7 @@ from db import *
 from functions import *
 from psycopg import Error as PsycopgError
 import logging
+import os
 
 # ============================================================================
 # LOGGING CONFIGURATION
@@ -36,7 +37,7 @@ CORS(app)
 # DATABASE CONNECTION
 # ============================================================================
 """Establish connection to PostgreSQL database."""
-DB_URI = 'postgresql://postgres:1234@localhost:5432/postgres'
+DB_URI = os.environ.get('DB_URI')
 connection = None
 
 try:
