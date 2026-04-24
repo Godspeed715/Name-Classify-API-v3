@@ -51,9 +51,9 @@ def get_name_with_optional(conn, gender: str = None, country_id: str = None, age
         valid_args_3 = {k: v for k, v in less_than.items() if v is not None}
 
         query = '''
-            SELECT id, name, gender, gender_probability, sample_size, age,
-                   age_group, country_id, country_probability, created_at
-            FROM name_classify_db
+            SELECT id, name, gender, gender_probability, age,
+                   age_group, country_id, country_name, country_probability, created_at
+            FROM name_data_table
         '''
 
         # Initialize the total_query here
