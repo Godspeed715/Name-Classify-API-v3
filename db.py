@@ -57,7 +57,7 @@ def get_name_with_optional(conn, gender: str = None, country_id: str = None, age
         '''
 
         # Initialize the total_query here
-        total_query = 'SELECT COUNT(*) FROM name_classify_db'
+        total_query = 'SELECT COUNT(*) FROM name_data_table'
 
         if valid_args_1:
             conditions.extend([f"{key} = %({key})s" for key in valid_args_1.keys()])
@@ -89,11 +89,11 @@ def get_name_with_optional(conn, gender: str = None, country_id: str = None, age
 
         with conn.cursor() as cur:
             # Execute the COUNT query first
-            cur.execute(total_query, (valid_args))
+            cur.execute(total_query, valid_args)
             total = cur.fetchone()[0]
 
             # Execute the main data query
-            cur.execute(query, (valid_args))
+            cur.execute(query, valid_args)
             response_data = cur.fetchall()
 
         response = {
