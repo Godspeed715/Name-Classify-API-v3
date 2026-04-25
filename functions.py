@@ -1,12 +1,10 @@
 import spacy
 import pycountry as py
-import country_converter as coco
 import sys
 import os
 import logging
 
 logger = logging.getLogger(__name__)
-cc = coco.CountryConverter()
 
 # Global variables for lazy loading
 nlp = None
@@ -16,27 +14,26 @@ def initialize_spacy_model():
     """
     Initialize spacy model on first use (lazy loading).
     This is necessary for Vercel serverless deployment.
+    
+    Returns:
+        bool: True if model loaded successfully, False if unavailable
     """
     global nlp, ruler
     
     if nlp is not None:
-        return  # Already initialized
+        return True  # Already initialized
     
     try:
         nlp = spacy.load("en_core_web_sm")
-        logger.info("Successfully loaded spacy model")
-    except OSError:
-        logger.error("Spacy model not found. This is expected on first deployment.")
-        # On Vercel, the model should be pre-downloaded during build
-        # For local development, you can uncomment the auto-download:
-        # import subprocess
-        # subprocess.check_call([sys.executable, "-m", "spacy", "download", "en_core_web_sm"])
-        # nlp = spacy.load("en_core_web_sm")
-        raise RuntimeError(
-            "Spacy model 'en_core_web_sm' not found. "
-            "For Vercel deployment, ensure the model is included in your build. "
-            "For local development, run: python -m spacy download en_core_web_sm"
+        logger.info("✅ Successfully loaded spacy model")
+        return True
+    except OSError as e:
+        logger.warning(
+            f"⚠️  Spacy model 'en_core_web_sm' not found: {e}\n"
+            "For local development, run: python -m spacy download en_core_web_sm\n"
+            "NLP search features will not be available."
         )
+        return False
     
     # Add an EntityRuler to the pipeline
     if "entity_ruler" not in nlp.pipe_names:
@@ -102,9 +99,14 @@ def initialize_spacy_model():
     ruler.add_patterns(country_patterns)
 
 def extract_query_params(text):
-    """Parses natural language and returns a dictionary of parameters."""
+    """Parses natural language and returns a dictionary of parameters.
+    
+    Returns None if spacy model is not available.
+    """
     # Initialize spacy model on first use
-    initialize_spacy_model()
+    if not initialize_spacy_model():
+        logger.warning("Spacy model unavailable, cannot parse natural language query")
+        return None
     
     doc = nlp(text)
     params = {}
@@ -117,12 +119,6 @@ def extract_query_params(text):
         if ent.label_ in ["AGE_GROUP", "GENDER", "COUNTRY_ID", 'MIN_AGE', 'MAX_AGE','SORT_BY', 'ORDER', 'LIMIT', 'PAGE']:
             # Lowercase the label to create the dictionary key (e.g., COUNTRY_ID -> country_id)
             params[ent.label_.lower()] = ent.ent_id_
-
-        if ent.label_ == 'NORP':
-            # print(ent.text)
-            country_name = cc.convert(names=ent.text, to='short_name')
-            if country_name != 'not found':
-                ent._.set("country", country_name)
 
         if ent.label_ in ['MIN_AGE', 'MAX_AGE','LIMIT', 'PAGE']:
             for token in ent:
