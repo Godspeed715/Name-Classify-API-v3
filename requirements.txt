@@ -15,7 +15,7 @@ numpy>=1.26.0
 psycopg==3.3.3
 psycopg-binary==3.3.3
 pycountry==23.12.11
-spacy>=3.7.2
+en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
 tzdata==2026.1
 thinc>=8.2.1
 Werkzeug==3.1.8
