@@ -61,6 +61,20 @@ def get_db_connection():
 # API ROUTES
 # ============================================================================
 
+@app.route('/', methods=['GET'])
+def health_check():
+    """
+    GET /
+    
+    Health check endpoint for server status verification.
+    Used by Vercel and monitoring services to verify the application is running.
+    """
+    return jsonify({
+        'status': 'healthy',
+        'service': 'Name-Classify-API-v3',
+        'version': '3.0.0'
+    }), 200
+
 @app.route('/api/profiles', methods=['GET'])
 def get_with_optional():
     """
@@ -342,4 +356,7 @@ if __name__ == '__main__':
 
 # Vercel WSGI export - required for serverless deployment
 # Make the app directly available for Vercel to import
+if not DB_URI:
+    logger.error("ERROR: DB_URI environment variable is not set. Cannot connect to database.")
+    raise RuntimeError("DB_URI environment variable is required for application to run")
 
