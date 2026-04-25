@@ -3,80 +3,109 @@ import pycountry as py
 import country_converter as coco
 import sys
 import os
+import logging
 
+logger = logging.getLogger(__name__)
 cc = coco.CountryConverter()
 
-# 1. Load the base English model with error handling
-try:
-    nlp = spacy.load("en_core_web_sm")
-except OSError:
-    # Model not installed, download it
-    import subprocess
-    subprocess.check_call([sys.executable, "-m", "spacy", "download", "en_core_web_sm"])
-    nlp = spacy.load("en_core_web_sm")
+# Global variables for lazy loading
+nlp = None
+ruler = None
 
-# 2. Add an EntityRuler to the pipeline
-# We place it before the default 'ner' so our custom rules take priority
-ruler = nlp.add_pipe("entity_ruler", before="ner")
+def initialize_spacy_model():
+    """
+    Initialize spacy model on first use (lazy loading).
+    This is necessary for Vercel serverless deployment.
+    """
+    global nlp, ruler
+    
+    if nlp is not None:
+        return  # Already initialized
+    
+    try:
+        nlp = spacy.load("en_core_web_sm")
+        logger.info("Successfully loaded spacy model")
+    except OSError:
+        logger.error("Spacy model not found. This is expected on first deployment.")
+        # On Vercel, the model should be pre-downloaded during build
+        # For local development, you can uncomment the auto-download:
+        # import subprocess
+        # subprocess.check_call([sys.executable, "-m", "spacy", "download", "en_core_web_sm"])
+        # nlp = spacy.load("en_core_web_sm")
+        raise RuntimeError(
+            "Spacy model 'en_core_web_sm' not found. "
+            "For Vercel deployment, ensure the model is included in your build. "
+            "For local development, run: python -m spacy download en_core_web_sm"
+        )
+    
+    # Add an EntityRuler to the pipeline
+    if "entity_ruler" not in nlp.pipe_names:
+        ruler = nlp.add_pipe("entity_ruler", before="ner")
+    else:
+        ruler = nlp.get_pipe("entity_ruler")
+    
+    # Define and add patterns
+    patterns = [
+        # Equal To (Exact Matches)
+        {"label": "AGE_GROUP", "pattern": [{"LOWER": "young"}], "id": "young"},
+        {'label': 'AGE_GROUP', 'pattern': [{'LEMMA': 'teenager'}], 'id': 'teen'},
+        {'label': 'AGE_GROUP', 'pattern': [{'LEMMA': 'child'}], 'id': 'child'},
+        {'label': 'AGE_GROUP', 'pattern': [{'LEMMA': 'adult'}], 'id': 'adult'},
+        {'label': 'AGE_GROUP', 'pattern': [{'LEMMA': 'senior'}], 'id': 'senior'},
 
-# 3. Define the extraction patterns and their normalized IDs
-patterns = [
-    # Equal To (Exact Matches)
-    {"label": "AGE_GROUP", "pattern": [{"LOWER": "young"}], "id": "young"},
-    {'label': 'AGE_GROUP', 'pattern': [{'LEMMA': 'teenager'}], 'id': 'teen'},
-    {'label': 'AGE_GROUP', 'pattern': [{'LEMMA': 'child'}], 'id': 'child'},
-    {'label': 'AGE_GROUP', 'pattern': [{'LEMMA': 'adult'}], 'id': 'adult'},
-    {'label': 'AGE_GROUP', 'pattern': [{'LEMMA': 'senior'}], 'id': 'senior'},
+        {'label': 'YOUNG', 'pattern': [{'LOWER': 'young'}], 'id': 'young'},
 
-    {'label': 'YOUNG', 'pattern': [{'LOWER': 'young'}], 'id': 'young'},
+        {"label": "GENDER", "pattern": [{"LEMMA": 'male'}], "id": "male"},
+        {"label": "GENDER", "pattern": [{"LEMMA": 'female'}], "id": "female"},
+        # To handle both males and females
+        {
+            "label": "TARGET",
+            "pattern": [
+                {"LEMMA": "male"},
+                {"IS_ALPHA": True, "OP": "*"}, # Catches any random words in between
+                {"LEMMA": "female"}
+            ]
+        },
 
-    {"label": "GENDER", "pattern": [{"LEMMA": 'male'}], "id": "male"},
-    {"label": "GENDER", "pattern": [{"LEMMA": 'female'}], "id": "female"},
-    # To handle both males and females
-    {
-        "label": "TARGET",
-        "pattern": [
-            {"LEMMA": "male"},
-            {"IS_ALPHA": True, "OP": "*"}, # Catches any random words in between
-            {"LEMMA": "female"}
-        ]
-    },
+        # Greater Than / Less Than (Ranges)
+        {
+            "label": "MIN_AGE",
+            "pattern": [{"LOWER": {"IN": ["above", "over", "older"]}}, {"LOWER": "than", "OP": "?"}, {"IS_DIGIT": True}]
+        },
+        {
+            "label": "MAX_AGE",
+            "pattern": [{"LOWER": {"IN": ["under", "below", "younger"]}}, {"LOWER": "than", "OP": "?"}, {"IS_DIGIT": True}]
+        },
 
-    # Greater Than / Less Than (Ranges)
-    {
-        "label": "MIN_AGE",
-        "pattern": [{"LOWER": {"IN": ["above", "over", "older"]}}, {"LOWER": "than", "OP": "?"}, {"IS_DIGIT": True}]
-    },
-    {
-        "label": "MAX_AGE",
-        "pattern": [{"LOWER": {"IN": ["under", "below", "younger"]}}, {"LOWER": "than", "OP": "?"}, {"IS_DIGIT": True}]
-    },
+        # Sorting & Ordering
+        # Note: You can add more "id" values for other columns like "name", "date", etc.
+        {"label": "SORT_BY", "pattern": [{"LOWER": "sort"}, {"LOWER": "by", "OP": "?"}, {"LOWER": "age"}], "id": "age"},
+        {"label": "ORDER", "pattern": [{"LOWER": {"IN": ["asc", "ascending", "oldest"]}}], "id": "asc"},
+        {"label": "ORDER_BY", "pattern": [{"LOWER": {"IN": ["desc", "descending", "newest"]}}], "id": "desc"},
 
-    # Sorting & Ordering
-    # Note: You can add more "id" values for other columns like "name", "date", etc.
-    {"label": "SORT_BY", "pattern": [{"LOWER": "sort"}, {"LOWER": "by", "OP": "?"}, {"LOWER": "age"}], "id": "age"},
-    {"label": "ORDER", "pattern": [{"LOWER": {"IN": ["asc", "ascending", "oldest"]}}], "id": "asc"},
-    {"label": "ORDER_BY", "pattern": [{"LOWER": {"IN": ["desc", "descending", "newest"]}}], "id": "desc"},
-
-    # Pagination & Limits
-    {"label": "LIMIT", "pattern": [{"LOWER": {"IN": ["top", "limit", "max"]}}, {"IS_DIGIT": True}]},
-    {"label": "PAGE", "pattern": [{"LOWER": "page"}, {"IS_DIGIT": True}]}
-]
-# Generate rules programmatically using pycountry
-country_patterns = []
-for country in py.countries:
-    # Add the official name (e.g., "Nigeria" -> "NG")
-    country_patterns.append({
-        "label": "COUNTRY_ID",
-        "pattern": [{"LEMMA": country.name.lower()}, {'IS_ALPHA': True, 'OP':'*'}],
-        "id": country.alpha_2
-    })
-
-ruler.add_patterns(patterns)
-ruler.add_patterns(country_patterns)
+        # Pagination & Limits
+        {"label": "LIMIT", "pattern": [{"LOWER": {"IN": ["top", "limit", "max"]}}, {"IS_DIGIT": True}]},
+        {"label": "PAGE", "pattern": [{"LOWER": "page"}, {"IS_DIGIT": True}]}
+    ]
+    
+    # Generate rules programmatically using pycountry
+    country_patterns = []
+    for country in py.countries:
+        # Add the official name (e.g., "Nigeria" -> "NG")
+        country_patterns.append({
+            "label": "COUNTRY_ID",
+            "pattern": [{"LEMMA": country.name.lower()}, {'IS_ALPHA': True, 'OP':'*'}],
+            "id": country.alpha_2
+        })
+    
+    ruler.add_patterns(patterns)
+    ruler.add_patterns(country_patterns)
 
 def extract_query_params(text):
     """Parses natural language and returns a dictionary of parameters."""
+    # Initialize spacy model on first use
+    initialize_spacy_model()
+    
     doc = nlp(text)
     params = {}
 
