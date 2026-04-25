@@ -36,10 +36,9 @@ def initialize_spacy_model():
         return False
     
     # Add an EntityRuler to the pipeline
-    if "entity_ruler" not in nlp.pipe_names:
-        ruler = nlp.add_pipe("entity_ruler", before="ner")
-    else:
-        ruler = nlp.get_pipe("entity_ruler")
+    
+    ruler = nlp.add_pipe("entity_ruler", before="ner")
+    
     
     # Define and add patterns
     patterns = [
@@ -107,7 +106,7 @@ def extract_query_params(text):
     if not initialize_spacy_model():
         logger.warning("Spacy model unavailable, cannot parse natural language query")
         return None
-    
+    initialize_spacy_model()
     doc = nlp(text)
     params = {}
 
